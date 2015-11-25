@@ -121,6 +121,8 @@ def get_nodes(options):
         condition = lambda node: options.name.search(node["name"])
     elif options.status:
         condition = lambda node: node["status"] == options.status
+    elif options.roles:
+        condition = lambda node: set(node["roles"]) & set(options.roles)
     else:
         condition = lambda node: node["group_id"] == options.group_id
 
@@ -134,7 +136,7 @@ def get_options():
         description="%(prog)s allows you to execute a command on fuel nodes "
                     "in parallel. It is a pure Python replacement for pdsh "
                     "utility.",
-        epilog="Please contact Sergey Arkhipov <sarkhipov@mirantis.com> for "
+        epilog="Please contact Sergey Arkhipov <serge@aerialsounds.org> for "
                "issues."
     )
 
@@ -176,6 +178,11 @@ def get_options():
         "-g", "--group-id",
         help="Group ID.",
         type=int)
+    node_classes.add_argument(
+        "-r", "--roles",
+        help="Node roles.",
+        type=argtype_roles
+    )
 
     return parser.parse_args()
 
@@ -194,6 +201,11 @@ def argtype_comma_separated_list(func):
         return func(value)
 
     return decorator
+
+
+@argtype_comma_separated_list
+def argtype_roles(values):
+    return values
 
 
 @argtype_comma_separated_list

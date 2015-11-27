@@ -2,8 +2,14 @@
 # -*- coding: utf-8 -*-
 
 
+import functools
+import glob
+import itertools
 import logging
+import os.path
+import posixpath
 import Queue
+import shutil
 import sys
 import threading
 import time
@@ -38,7 +44,7 @@ class QueuedStream(object):
     flush = close
 
 
-def execute(hostnames, options):
+def execute(func, hostnames, options):
     concurrency = options.concurrency
     if not concurrency:
         concurrency = len(hostnames)
@@ -51,9 +57,9 @@ def execute(hostnames, options):
     try:
         with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
             result = [
-                pool.submit(run_on_host,
+                pool.submit(func,
                             host,
-                            options.command,
+                            options,
                             QueuedStream(host, stdout_queue),
                             QueuedStream(host, stderr_queue))
                 for host in hostnames]
@@ -73,15 +79,13 @@ def execute(hostnames, options):
         stderr_thread.join()
 
 
-def run_on_host(host, command, stdout, stderr):
-    str_command = " ".join(command)
-    session = spur.SshShell(host,
-                            missing_host_key=spur.ssh.MissingHostKey.accept)
+def run_on_host_func(host, options, stdout, stderr):
+    str_command = " ".join(options.command)
 
-    with session as ssh:
+    with get_ssh(host) as ssh:
         try:
             logging.debug("Execute %s on host %s", str_command, host)
-            ssh.run(command, stdout=stdout, stderr=stderr)
+            ssh.run(options.command, stdout=stdout, stderr=stderr)
         except spur.NoSuchCommandError:
             logging.error("No such command on host %s", host)
             raise ValueError("Cannot execute '{0}' on {1}",
@@ -89,6 +93,27 @@ def run_on_host(host, command, stdout, stderr):
         except:
             logging.exception("Problem with executing %s on host %s",
                               str_command, host)
+
+
+def cp_to_remote_func(host, options, stdout, stderr):
+    local_paths = itertools.chain.from_iterable(
+        glob.glob(path) for path in options.src_path)
+    local_paths = filter(lambda path: os.path.isfile(path), local_paths)
+
+    with get_ssh(host) as ssh:
+        for local_path in local_paths:
+            local_basename = os.path.basename(local_path)
+            remote_path = posixpath.join(options.dst_path, local_basename)
+
+            logging.info("Copy %s to %s:%s", local_path, host, remote_path)
+
+            with ssh.open(remote_path, "wb") as remote_fileobj:
+                with open(local_path, "rb") as local_fileobj:
+                    shutil.copyfileobj(local_fileobj, remote_fileobj)
+
+
+def get_ssh(host):
+    return spur.SshShell(host, missing_host_key=spur.ssh.MissingHostKey.accept)
 
 
 def wrap_stream(stream):
@@ -151,3 +176,7 @@ def get_nodes(options):
     logging.debug("Nodes to execute on: %s", nodes)
 
     return nodes
+
+
+remote_cmd = functools.partial(execute, run_on_host_func)
+cp_to_remote = functools.partial(execute, cp_to_remote_func)

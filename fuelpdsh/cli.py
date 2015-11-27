@@ -10,22 +10,44 @@ import re
 import fuelpdsh.pdsh
 
 
-def main():
-    options = get_options()
+def cli(cmd_to_execute, argumenter):
+    options = get_options(argumenter)
     configure(options)
-    logging.debug("Options: %s", options)
 
     try:
         nodes = fuelpdsh.pdsh.get_nodes(options)
     except:
         return os.EX_SOFTWARE
 
-    fuelpdsh.pdsh.execute(nodes, options)
+    try:
+        cmd_to_execute(nodes, options)
+    except:
+        return os.EX_SOFTWARE
 
     return os.EX_OK
 
 
+def remote_cmd_argumenter(parser):
+    parser.add_argument(
+        "command",
+        help="Command to execute",
+        nargs="+"
+    )
+
+
+def cp_to_remote_argumenter(parser):
+    parser.add_argument(
+        "src_path",
+        help="Source paths to copy",
+        nargs="+")
+    parser.add_argument(
+        "dst_path",
+        help="Remote destination")
+
+
 def configure(options):
+    logging.debug("Options: %s", options)
+
     level = logging.ERROR
     log_format = "%(message)s"
 
@@ -34,19 +56,16 @@ def configure(options):
         log_format = "*** %(thread)d >>> %(message)s"
     elif options.debug:
         level = logging.DEBUG
-        log_format = "%(thread)d | [%(levelname)-5s] (%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
+        log_format = "%(thread)d | [%(levelname)-5s] " \
+                     "(%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
 
     logging.basicConfig(
         level=level,
         format=log_format)
 
 
-def get_options():
+def get_options(argumenter):
     parser = argparse.ArgumentParser(
-        prog="fuel-pdsh",
-        description="%(prog)s allows you to execute a command on fuel nodes "
-                    "in parallel. It is a pure Python replacement for pdsh "
-                    "utility.",
         epilog="Please contact Sergey Arkhipov <serge@aerialsounds.org> for "
                "issues."
     )
@@ -58,11 +77,6 @@ def get_options():
              " no limits.",
         type=argtype_positive_integer,
         default=0
-    )
-    parser.add_argument(
-        "command",
-        help="Command to execute",
-        nargs="+"
     )
 
     verbosity = parser.add_mutually_exclusive_group(required=False)
@@ -108,6 +122,8 @@ def get_options():
         help="Node roles.",
         type=argtype_roles
     )
+
+    argumenter(parser)
 
     return parser.parse_args()
 
@@ -174,3 +190,10 @@ def argtype_positive_integer(value):
 
     raise argparse.ArgumentTypeError(
         "Value {0} has to be a positive integer".format(value))
+
+
+remote_cmd = functools.partial(cli,
+                               fuelpdsh.pdsh.remote_cmd, remote_cmd_argumenter)
+cp_to_remote = functools.partial(cli,
+                                 fuelpdsh.pdsh.cp_to_remote,
+                                 cp_to_remote_argumenter)

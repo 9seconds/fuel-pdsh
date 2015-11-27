@@ -3,6 +3,7 @@
 
 import argparse
 import functools
+import logging
 import os
 import re
 
@@ -11,10 +12,33 @@ import fuelpdsh.pdsh
 
 def main():
     options = get_options()
-    nodes = fuelpdsh.pdsh.get_nodes(options)
+    configure(options)
+    logging.debug("Options: %s", options)
+
+    try:
+        nodes = fuelpdsh.pdsh.get_nodes(options)
+    except:
+        return os.EX_SOFTWARE
+
     fuelpdsh.pdsh.execute(nodes, options)
 
     return os.EX_OK
+
+
+def configure(options):
+    level = logging.ERROR
+    log_format = "%(message)s"
+
+    if options.verbose:
+        level = logging.INFO
+        log_format = "*** %(thread)d >>> %(message)s"
+    elif options.debug:
+        level = logging.DEBUG
+        log_format = "%(thread)d | [%(levelname)-5s] (%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
+
+    logging.basicConfig(
+        level=level,
+        format=log_format)
 
 
 def get_options():
@@ -39,6 +63,20 @@ def get_options():
         "command",
         help="Command to execute",
         nargs="+"
+    )
+
+    verbosity = parser.add_mutually_exclusive_group(required=False)
+    verbosity.add_argument(
+        "-v", "--verbose",
+        help="Be verbose.",
+        action="store_true",
+        default=False
+    )
+    verbosity.add_argument(
+        "-d", "--debug",
+        help="Be event more verbose, for debugging.",
+        action="store_true",
+        default=False
     )
 
     node_classes = parser.add_mutually_exclusive_group(required=True)

@@ -6,11 +6,12 @@ import functools
 import glob
 import itertools
 import logging
-import signal
+import os
 import os.path
 import posixpath
 import Queue
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -25,8 +26,13 @@ import fuelpdsh.ssh
 LOG = logging.getLogger("fuelpdsh." + __name__)
 """Logger."""
 
+GENTLE_STOP_TIMEOUT = 5
+"""How long to wait before sending SIGTERM to SSH process."""
+
 
 class QueuedStream(object):
+
+    __slots__ = "queue", "accumulator", "prefix"
 
     def __init__(self, hostname, queue):
         self.queue = queue
@@ -52,7 +58,7 @@ class QueuedStream(object):
     flush = close
 
 
-def execute(func, hostnames, options):
+def execute(func, hostnames, options, stop_ev):
     concurrency = options.concurrency
     if not concurrency:
         concurrency = len(hostnames)
@@ -65,10 +71,12 @@ def execute(func, hostnames, options):
     try:
         with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
             futures = []
+
             for host in hostnames:
                 stdout = QueuedStream(host, stdout_queue)
                 stderr = QueuedStream(host, stderr_queue)
-                future = pool.submit(func, host, options, stdout, stderr)
+                future = pool.submit(func, host, options, stdout, stderr,
+                                     stop_ev)
 
                 def callback(*args, **kwargs):
                     stdout.flush()
@@ -77,11 +85,9 @@ def execute(func, hostnames, options):
                 future.add_done_callback(callback)
                 futures.append(future)
 
-            wait_for_futures(futures)
-    except Exception as exc:
-        LOG.exception("Cannot execute tasks: %s", exc)
+            wait_for_futures(futures, stop_ev)
     finally:
-        clean_futures(futures)
+        clean_futures(futures, stop_ev)
 
         stdout_ev.set()
         stderr_ev.set()
@@ -93,20 +99,24 @@ def execute(func, hostnames, options):
         stderr_thread.join()
 
 
-def wait_for_futures(futures):
+def wait_for_futures(futures, stop_ev):
+    try:
+        while not all(future.done() for future in futures):
+            time.sleep(1)
+    except KeyboardInterrupt:
+        LOG.debug("Set stop event")
+        stop_ev.set()
+
+
+def clean_futures(futures, stop_ev):
+    stop_ev.set()
     while not all(future.done() for future in futures):
         time.sleep(0.01)
 
 
-def clean_futures(futures):
-    while not all(future.done() for future in futures):
-        for future in futures:
-            if future.running():
-                future.cancel()
-        time.sleep(0.01)
-
-
-def run_on_host_func(host, options, stdout, stderr):
+def run_on_host_func(host, options, stdout, stderr, stop_ev):
+    if stop_ev.is_set():
+        return os.EX_OK
     str_command = " ".join(options.command)
 
     with fuelpdsh.ssh.get_ssh(host) as ssh:
@@ -119,6 +129,8 @@ def run_on_host_func(host, options, stdout, stderr):
                                 store_pid=True,
                                 allow_error=False)
             while process.is_running():
+                if stop_ev.is_set():
+                    raise KeyboardInterrupt
                 time.sleep(0.5)
         except spur.NoSuchCommandError:
             LOG.error("No such command on host %s", host)
@@ -126,15 +138,32 @@ def run_on_host_func(host, options, stdout, stderr):
         except spur.RunProcessError as exc:
             stderr.write("\n{0}".format(exc.stderr_output))
             raise
+        except KeyboardInterrupt:
+            stop_ssh_process(host, process)
         except:
             LOG.exception("Problem with executing %s on host %s",
                           str_command, host)
             raise
-        except KeyboardInterrupt:
-            process.send_signal(signal.SIGINT)
-            raise
         else:
             return process.wait_for_result().return_code
+
+
+def stop_ssh_process(host, process):
+    LOG.info("Stop process on host %s", host)
+
+    LOG.debug("Send SIGTERM to host %s", host)
+    process.send_signal(signal.SIGTERM)
+    time.sleep(1)
+
+    if not process.is_running():
+        return
+
+    for _ in range(GENTLE_STOP_TIMEOUT - 1):
+        if not process.is_running():
+            time.sleep(1)
+    else:
+        LOG.debug("Send SIGKILL to host %s", host)
+        process.send_signal(signal.SIGKILL)
 
 
 def cp_to_remote_func(host, options, stdout, stderr):
@@ -155,7 +184,7 @@ def cp_to_remote_func(host, options, stdout, stderr):
 
 
 def wrap_stream(stream):
-    queue = Queue.Queue(1000000)
+    queue = Queue.Queue(10000)
     stop_event = threading.Event()
 
     thread = threading.Thread(target=stream_wrapper,

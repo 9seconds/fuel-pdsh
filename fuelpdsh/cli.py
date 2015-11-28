@@ -2,9 +2,9 @@
 
 
 import argparse
+import atexit
 import functools
 import logging
-import multiprocessing
 import os
 import re
 import threading
@@ -15,8 +15,14 @@ import fuelpdsh.pdsh
 LOG = logging.getLogger("fuelpdsh." + __name__)
 """Logger."""
 
+DEFAULT_CONCURRENCY = 4
+"""How many hosts we have to access in parallel."""
+
 
 def cli(cmd_to_execute, argumenter):
+    stop_ev = threading.Event()
+    atexit.register(stop_ev.set)
+
     options = get_options(argumenter)
     configure(options)
 
@@ -26,7 +32,7 @@ def cli(cmd_to_execute, argumenter):
         return os.EX_SOFTWARE
 
     try:
-        cmd_to_execute(nodes, options)
+        cmd_to_execute(nodes, options, stop_ev)
     except:
         return os.EX_SOFTWARE
 
@@ -93,7 +99,7 @@ def get_options(argumenter):
              "By default (%(default)d), we are trying to connect to all nodes,"
              " no limits.",
         type=argtype_positive_integer,
-        default=multiprocessing.cpu_count()
+        default=DEFAULT_CONCURRENCY
     )
 
     verbosity = parser.add_mutually_exclusive_group(required=False)

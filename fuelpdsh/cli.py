@@ -66,8 +66,7 @@ def configure(options):
         log_format = "*** %(thread)d >>> %(message)s"
     elif options.debug:
         level = logging.DEBUG
-        log_format = "%(thread)d | [%(levelname)-5s] " \
-                     "(%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
+        log_format = "%(thread)d | [%(levelname)-5s] (%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
 
     for namespace in "fuelpdsh", "paramiko":
         configure_logger(namespace, level, log_format)
@@ -89,15 +88,13 @@ def configure_logger(namespace, log_level, log_format):
 
 def get_options(argumenter):
     parser = argparse.ArgumentParser(
-        epilog="Please contact Sergey Arkhipov <serge@aerialsounds.org> for "
-               "issues."
+        epilog="Please contact Sergey Arkhipov <serge@aerialsounds.org> for issues."
     )
 
     parser.add_argument(
         "--concurrency",
         help="How many simultaneous connections should be established. "
-             "By default (%(default)d), we are trying to connect to all nodes,"
-             " no limits.",
+             "By default (%(default)d), we are trying to connect to all nodes, no limits.",
         type=argtype_positive_integer,
         default=DEFAULT_CONCURRENCY
     )
@@ -155,8 +152,7 @@ def argtype_comma_separated_list(func):
     @functools.wraps(func)
     def decorator(value):
         if not isinstance(value, basestring):
-            raise argparse.ArgumentTypeError(
-                "Value {0} has to be a string".format(value))
+            raise argparse.ArgumentTypeError("Value {0} has to be a string".format(value))
         if not value:
             value = []
         else:
@@ -189,8 +185,7 @@ def argtype_node_ips(values):
     failed_values = []
 
     ip_regex = re.compile(
-        r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
-        "(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)")
+        r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)")
     for value in values:
         if not ip_regex.match(value):
             failed_values.append(value)
@@ -211,12 +206,8 @@ def argtype_positive_integer(value):
         if value >= 0:
             return value
 
-    raise argparse.ArgumentTypeError(
-        "Value {0} has to be a positive integer".format(value))
+    raise argparse.ArgumentTypeError("Value {0} has to be a positive integer".format(value))
 
 
-remote_cmd = functools.partial(cli,
-                               fuelpdsh.pdsh.remote_cmd, remote_cmd_argumenter)
-cp_to_remote = functools.partial(cli,
-                                 fuelpdsh.pdsh.cp_to_remote,
-                                 cp_to_remote_argumenter)
+remote_cmd = functools.partial(cli, fuelpdsh.pdsh.remote_cmd, remote_cmd_argumenter)
+cp_to_remote = functools.partial(cli, fuelpdsh.pdsh.cp_to_remote, cp_to_remote_argumenter)

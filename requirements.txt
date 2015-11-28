@@ -1,3 +1,6 @@
-python-fuelclient
-spur
+python-fuelclient >= 7.0.0
+spur <= 0.4
 futures
+
+# PyCrypto >= 2.5 has a big performance degradation
+pycrypto < 2.5

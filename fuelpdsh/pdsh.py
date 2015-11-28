@@ -34,10 +34,10 @@ class QueuedStream(object):
 
     __slots__ = "queue", "accumulator", "prefix"
 
-    def __init__(self, hostname, queue):
+    def __init__(self, hostname, max_host_name_len, queue):
         self.queue = queue
         self.accumulator = ""
-        self.prefix = unicode(hostname + ": ")
+        self.prefix = hostname.ljust(max_host_name_len) + ":  "
 
     def put(self, data):
         self.queue.put(self.prefix + data.decode("unicode_escape"), True)
@@ -72,11 +72,11 @@ def execute(func, hostnames, options, stop_ev):
         with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
             futures = []
 
+            max_host_name_len = max(len(host) for host in hostnames)
             for host in hostnames:
-                stdout = QueuedStream(host, stdout_queue)
-                stderr = QueuedStream(host, stderr_queue)
-                future = pool.submit(func, host, options, stdout, stderr,
-                                     stop_ev)
+                stdout = QueuedStream(host, max_host_name_len, stdout_queue)
+                stderr = QueuedStream(host, max_host_name_len, stderr_queue)
+                future = pool.submit(func, host, options, stdout, stderr, stop_ev)
 
                 def callback(*args, **kwargs):
                     stdout.flush()
@@ -124,10 +124,7 @@ def run_on_host_func(host, options, stdout, stderr, stop_ev):
 
         try:
             process = ssh.spawn(options.command,
-                                stdout=stdout,
-                                stderr=stderr,
-                                store_pid=True,
-                                allow_error=False)
+                                stdout=stdout, stderr=stderr, store_pid=True, allow_error=False)
             while process.is_running():
                 if stop_ev.is_set():
                     raise KeyboardInterrupt
@@ -141,8 +138,7 @@ def run_on_host_func(host, options, stdout, stderr, stop_ev):
         except KeyboardInterrupt:
             stop_ssh_process(host, process)
         except:
-            LOG.exception("Problem with executing %s on host %s",
-                          str_command, host)
+            LOG.exception("Problem with executing %s on host %s", str_command, host)
             raise
         else:
             return process.wait_for_result().return_code
@@ -166,9 +162,8 @@ def stop_ssh_process(host, process):
         process.send_signal(signal.SIGKILL)
 
 
-def cp_to_remote_func(host, options, stdout, stderr):
-    local_paths = itertools.chain.from_iterable(
-        glob.glob(path) for path in options.src_path)
+def cp_to_remote_func(host, options, stdout, stderr, stop_ev):
+    local_paths = itertools.chain.from_iterable(glob.glob(path) for path in options.src_path)
     local_paths = filter(lambda path: os.path.isfile(path), local_paths)
 
     with fuelpdsh.ssh.get_ssh(host) as ssh:
@@ -187,8 +182,7 @@ def wrap_stream(stream):
     queue = Queue.Queue(10000)
     stop_event = threading.Event()
 
-    thread = threading.Thread(target=stream_wrapper,
-                              args=(stream, queue, stop_event))
+    thread = threading.Thread(target=stream_wrapper, args=(stream, queue, stop_event))
     thread.daemon = True
     thread.start()
 

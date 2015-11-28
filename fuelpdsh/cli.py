@@ -4,10 +4,16 @@
 import argparse
 import functools
 import logging
+import multiprocessing
 import os
 import re
+import threading
 
 import fuelpdsh.pdsh
+
+
+LOG = logging.getLogger("fuelpdsh." + __name__)
+"""Logger."""
 
 
 def cli(cmd_to_execute, argumenter):
@@ -46,8 +52,6 @@ def cp_to_remote_argumenter(parser):
 
 
 def configure(options):
-    logging.debug("Options: %s", options)
-
     level = logging.ERROR
     log_format = "%(message)s"
 
@@ -59,9 +63,22 @@ def configure(options):
         log_format = "%(thread)d | [%(levelname)-5s] " \
                      "(%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
 
-    logging.basicConfig(
-        level=level,
-        format=log_format)
+    for namespace in "fuelpdsh", "paramiko":
+        configure_logger(namespace, level, log_format)
+
+    LOG.debug("Options are %s", options)
+
+
+def configure_logger(namespace, log_level, log_format):
+    root_logger = logging.getLogger("fuelpdsh")
+    root_logger.handlers = []
+    root_logger.propagate = False
+    root_logger.setLevel(log_level)
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(log_format)
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
 
 
 def get_options(argumenter):
@@ -76,7 +93,7 @@ def get_options(argumenter):
              "By default (%(default)d), we are trying to connect to all nodes,"
              " no limits.",
         type=argtype_positive_integer,
-        default=0
+        default=multiprocessing.cpu_count()
     )
 
     verbosity = parser.add_mutually_exclusive_group(required=False)

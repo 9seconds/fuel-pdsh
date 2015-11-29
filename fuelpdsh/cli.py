@@ -66,7 +66,7 @@ def configure(options):
         log_format = "*** %(thread)d >>> %(message)s"
     elif options.debug:
         level = logging.DEBUG
-        log_format = "%(thread)d | [%(levelname)-5s] (%(module)20s:%(lineno)-3d) %(asctime)-15s: %(message)s"
+        log_format = "%(thread)d | [%(levelname)-5s] (%(module)10s:%(lineno)-3d) %(asctime)-15s: %(message)s"
 
     for namespace in "fuelpdsh", "paramiko":
         configure_logger(namespace, level, log_format)

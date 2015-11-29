@@ -9,11 +9,9 @@ import logging
 import os
 import os.path
 import posixpath
-import Queue
 import shutil
 import signal
 import sys
-import threading
 import time
 
 import concurrent.futures
@@ -21,6 +19,7 @@ import fuelclient
 import spur
 
 import fuelpdsh.ssh
+import fuelpdsh.stream
 
 
 LOG = logging.getLogger("fuelpdsh." + __name__)
@@ -30,34 +29,6 @@ GENTLE_STOP_TIMEOUT = 5
 """How long to wait before sending SIGTERM to SSH process."""
 
 
-class QueuedStream(object):
-
-    __slots__ = "queue", "accumulator", "prefix"
-
-    def __init__(self, hostname, max_host_name_len, queue):
-        self.queue = queue
-        self.accumulator = ""
-        self.prefix = hostname.ljust(max_host_name_len) + ":  "
-
-    def put(self, data):
-        self.queue.put(self.prefix + data.decode("unicode_escape"), True)
-
-    def write(self, data):
-        self.accumulator += data
-
-        if "\n" in self.accumulator:
-            lines = self.accumulator.split("\n")
-            self.accumulator = lines[-1]
-            for line in lines[:-1]:
-                self.put(line)
-
-    def close(self):
-        if self.accumulator:
-            self.put(self.accumulator)
-
-    flush = close
-
-
 def execute(func, hostnames, options, stop_ev):
     concurrency = options.concurrency
     if not concurrency:
@@ -65,38 +36,31 @@ def execute(func, hostnames, options, stop_ev):
 
     LOG.info("Execute with %d threads", concurrency)
 
-    stdout_queue, stdout_ev, stdout_thread = wrap_stream(sys.stdout)
-    stderr_queue, stderr_ev, stderr_thread = wrap_stream(sys.stderr)
+    stdout_stream = fuelpdsh.stream.Stream(sys.stdout)
+    stderr_stream = fuelpdsh.stream.Stream(sys.stderr)
+
+    stdout_stream.run()
+    stderr_stream.run()
 
     try:
         with concurrent.futures.ThreadPoolExecutor(concurrency) as pool:
             futures = []
 
-            max_host_name_len = max(len(host) for host in hostnames)
+            hostname_padding = max(len(host) for host in hostnames)
             for host in hostnames:
-                stdout = QueuedStream(host, max_host_name_len, stdout_queue)
-                stderr = QueuedStream(host, max_host_name_len, stderr_queue)
+                stdout = stdout_stream.make_host_stream(host, hostname_padding)
+                stderr = stderr_stream.make_host_stream(host, hostname_padding)
                 future = pool.submit(func, host, options, stdout, stderr, stop_ev)
-
-                def callback(*args, **kwargs):
-                    stdout.flush()
-                    stderr.flush()
-
-                future.add_done_callback(callback)
                 futures.append(future)
 
             wait_for_futures(futures, stop_ev)
     finally:
         clean_futures(futures, stop_ev)
 
-        stdout_ev.set()
-        stderr_ev.set()
-
-        LOG.debug("Waiting for stdout thread to be finished")
-        stdout_thread.join()
-
-        LOG.debug("Waiting for stderr thread to be finished")
-        stderr_thread.join()
+        stdout_stream.stop()
+        stderr_stream.stop()
+        for stream in stdout_stream, stderr_stream:
+            stream.wait()
 
 
 def wait_for_futures(futures, stop_ev):
@@ -117,6 +81,7 @@ def clean_futures(futures, stop_ev):
 def run_on_host_func(host, options, stdout, stderr, stop_ev):
     if stop_ev.is_set():
         return os.EX_OK
+
     str_command = " ".join(options.command)
 
     with fuelpdsh.ssh.get_ssh(host) as ssh:
@@ -142,6 +107,9 @@ def run_on_host_func(host, options, stdout, stderr, stop_ev):
             raise
         else:
             return process.wait_for_result().return_code
+        finally:
+            stdout.flush()
+            stderr.flush()
 
 
 def stop_ssh_process(host, process):
@@ -176,28 +144,6 @@ def cp_to_remote_func(host, options, stdout, stderr, stop_ev):
             with ssh.open(remote_path, "wb") as remote_fileobj:
                 with open(local_path, "rb") as local_fileobj:
                     shutil.copyfileobj(local_fileobj, remote_fileobj)
-
-
-def wrap_stream(stream):
-    queue = Queue.Queue(10000)
-    stop_event = threading.Event()
-
-    thread = threading.Thread(target=stream_wrapper, args=(stream, queue, stop_event))
-    thread.daemon = True
-    thread.start()
-
-    return queue, stop_event, thread
-
-
-def stream_wrapper(stream, queue, event):
-    while not event.is_set():
-        try:
-            line = queue.get_nowait()
-        except Queue.Empty:
-            time.sleep(0.01)
-        else:
-            stream.write(line)
-            stream.write("\n")
 
 
 def get_nodes(options):

@@ -5,7 +5,8 @@
 import setuptools
 
 try:
-    import multiprocessing  # NOQA
+    import multiprocessing
+    assert multiprocessing
 except ImportError:
     pass
 

@@ -9,10 +9,13 @@ import os
 import re
 import threading
 
+import fuelpdsh
 import fuelpdsh.pdsh
+import fuelpdsh.cp
+import fuelpdsh.utils
 
 
-LOG = logging.getLogger("fuelpdsh." + __name__)
+LOG = fuelpdsh.logger(__name__)
 """Logger."""
 
 DEFAULT_CONCURRENCY = 4
@@ -27,16 +30,14 @@ def cli(cmd_to_execute, argumenter):
     configure(options)
 
     try:
-        nodes = fuelpdsh.pdsh.get_nodes(options)
+        nodes = fuelpdsh.utils.get_nodes(options)
     except:
         return os.EX_SOFTWARE
 
     try:
-        cmd_to_execute(nodes, options, stop_ev)
+        return cmd_to_execute(nodes, options, stop_ev)
     except:
         return os.EX_SOFTWARE
-
-    return os.EX_OK
 
 
 def remote_cmd_argumenter(parser):
@@ -209,5 +210,5 @@ def argtype_positive_integer(value):
     raise argparse.ArgumentTypeError("Value {0} has to be a positive integer".format(value))
 
 
-remote_cmd = functools.partial(cli, fuelpdsh.pdsh.remote_cmd, remote_cmd_argumenter)
-cp_to_remote = functools.partial(cli, fuelpdsh.pdsh.cp_to_remote, cp_to_remote_argumenter)
+remote_cmd = functools.partial(cli, fuelpdsh.pdsh.command, remote_cmd_argumenter)
+cp_to_remote = functools.partial(cli, fuelpdsh.cp.command, cp_to_remote_argumenter)

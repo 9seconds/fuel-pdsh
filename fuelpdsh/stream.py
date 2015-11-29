@@ -7,8 +7,10 @@ import Queue
 import threading
 import time
 
+import fuelpdsh
 
-LOG = logging.getLogger("fuelpdsh." + __name__)
+
+LOG = fuelpdsh.logger(__name__)
 """Logger."""
 
 

@@ -99,6 +99,34 @@ def get_options(argumenter):
         type=argtype_positive_integer,
         default=DEFAULT_CONCURRENCY
     )
+    parser.add_argument(
+        "-c", "--cluster-id",
+        help="Select only nodes which belong to cluster with such ID.",
+        type=int)
+    parser.add_argument(
+        "-w", "--node-ids",
+        help="Plain comma-separated list of nodes.",
+        type=argtype_node_ids)
+    parser.add_argument(
+        "-i", "--ips",
+        help="Plain comma-separated list of node IPs.",
+        type=argtype_node_ips)
+    parser.add_argument(
+        "-n", "--name",
+        help="Regular expression for the node name.",
+        type=re.compile)
+    parser.add_argument(
+        "-s", "--status",
+        help="Node status.")
+    parser.add_argument(
+        "-g", "--group-id",
+        help="Group ID.",
+        type=int)
+    parser.add_argument(
+        "-r", "--roles",
+        help="Node roles.",
+        type=argtype_roles
+    )
 
     verbosity = parser.add_mutually_exclusive_group(required=False)
     verbosity.add_argument(
@@ -112,36 +140,6 @@ def get_options(argumenter):
         help="Be event more verbose, for debugging.",
         action="store_true",
         default=False
-    )
-
-    node_classes = parser.add_mutually_exclusive_group(required=True)
-    node_classes.add_argument(
-        "-w", "--node-ids",
-        help="Plain comma-separated list of nodes.",
-        type=argtype_node_ids)
-    node_classes.add_argument(
-        "-c", "--cluster",
-        help="All nodes belong to cluster.",
-        type=int)
-    node_classes.add_argument(
-        "-i", "--ips",
-        help="Plain comma-separated list of node IPs.",
-        type=argtype_node_ips)
-    node_classes.add_argument(
-        "-n", "--name",
-        help="Regular expression for the node name.",
-        type=re.compile)
-    node_classes.add_argument(
-        "-s", "--status",
-        help="Node status.")
-    node_classes.add_argument(
-        "-g", "--group-id",
-        help="Group ID.",
-        type=int)
-    node_classes.add_argument(
-        "-r", "--roles",
-        help="Node roles.",
-        type=argtype_roles
     )
 
     argumenter(parser)

@@ -45,35 +45,33 @@ def futures_exit_code(futures):
 def get_nodes(options):
     client = fuelclient.get_client("node")
 
-    if options.cluster:
-        LOG.debug("Filter on cluster %s", options.cluster)
-        condition = lambda node: node["cluster"] == options.cluster
-    elif options.node_ids:
+    conditions = []
+    if options.node_ids:
         LOG.debug("Filter on node IDs %s", options.node_ids)
-        condition = lambda node: node["hostname"] in options.node_ids
-    elif options.ips:
+        conditions.append(lambda node: node["hostname"] in options.node_ids)
+    if options.ips:
         LOG.debug("Filter on node IPs %s", options.ips)
-        condition = lambda node: node["ip"] in options.ips
-    elif options.name:
+        conditions.append(lambda node: node["ip"] in options.ips)
+    if options.name:
         LOG.debug("Filter on node regexp name '%s'", options.name.pattern)
-        condition = lambda node: options.name.search(node["name"])
-    elif options.status:
+        conditions.append(lambda node: options.name.search(node["name"]))
+    if options.status:
         LOG.debug("Filter on node status %s", options.status)
-        condition = lambda node: node["status"] == options.status
-    elif options.roles:
+        conditions.append(lambda node: node["status"] == options.status)
+    if options.roles:
         LOG.debug("Filter on node roles %s", options.roles)
-        condition = lambda node: set(node["roles"]) & set(options.roles)
-    else:
+        conditions.append(lambda node: set(node["roles"]) & set(options.roles))
+    if options.group_id:
         LOG.debug("Filter on node group ID %s", options.group_id)
-        condition = lambda node: node["group_id"] == options.group_id
+        conditions.append(lambda node: node["group_id"] == options.group_id)
 
     try:
-        nodes = client.get_all()
+        nodes = client.get_all(options.cluster_id)
     except Exception as exc:
         LOG.error("Cannot fetch from Fuel: %s", exc)
         raise Exception
 
-    nodes = sorted(node["hostname"] for node in nodes if condition(node))
+    nodes = sorted(node["hostname"] for node in nodes if all(cond(node) for cond in conditions))
 
     LOG.info("Found %d suitable nodes", len(nodes))
     LOG.debug("Nodes to execute on: %s", nodes)

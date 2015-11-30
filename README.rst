@@ -2,6 +2,8 @@
 fuel-pdsh
 =========
 
+|PyPi Package|
+
 fuel-pdsh is a small utility which allows you to execute one command on
 the multiple OpenStack nodes from master node (aka Fuel node) remotely
 using SSH.
@@ -272,3 +274,7 @@ Then new directory ``/tmp/zabbix.deb/`` will be created and you file
 gonna be copied in ``/tmp/zabbix.deb/zabbix.deb``. This is intentional
 because to avoid ambiguaty on copying several files into one place.
 Please remember about that.
+
+
+.. |PyPi Package| image:: https://badge.fury.io/py/fuel-pdsh.svg
+    :target: https://pypi.python.org/pypi/fuel-pdsh

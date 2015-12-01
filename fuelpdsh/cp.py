@@ -5,6 +5,7 @@ import glob
 import os
 import os.path
 import posixpath
+import threading
 
 import concurrent.futures
 
@@ -56,26 +57,27 @@ def cp_to_remote(host, options, files_to_copy, pool, stop_ev):
     LOG.info("Copy %d files to host %s", len(files_to_copy), host)
 
     futures = []
+    host_stop_ev = threading.Event()
     with fuelpdsh.ssh.get_ssh(host) as ssh:
         for filename in files_to_copy:
             local_basename = os.path.basename(filename)
             remote_path = posixpath.join(options.dst_path, local_basename)
-            future = pool.submit(copy_file, ssh, host, filename, remote_path, stop_ev)
+            future = pool.submit(copy_file, ssh, host, filename, remote_path, host_stop_ev, stop_ev)
             futures.append(future)
 
-        fuelpdsh.utils.wait_for_futures(futures, stop_ev)
+        fuelpdsh.utils.wait_for_futures(futures, host_stop_ev)
 
     return fuelpdsh.utils.futures_exit_code(futures)
 
 
-def copy_file(ssh, host, local_path, remote_path, stop_ev):
+def copy_file(ssh, host, local_path, remote_path, host_stop_ev, stop_ev):
     LOG.info("Copy %s to %s:%s", local_path, host, remote_path)
 
     with ssh.open(remote_path, "wb") as remote_fileobj:
         with open(local_path, "rb") as local_fileobj:
             copy_finished = False
 
-            while not stop_ev.is_set():
+            while not (host_stop_ev.is_set() or stop_ev.is_set()):
                 buf = local_fileobj.read(BUFFER_LENGTH)
                 if not buf:
                     copy_finished = True

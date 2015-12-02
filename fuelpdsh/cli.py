@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 
 
-import argparse
 import atexit
 import functools
 import logging
 import os
 import re
+import sys
 import threading
 
+import argparse
+import pbr.version
+
 import fuelpdsh
-import fuelpdsh.pdsh
 import fuelpdsh.cp
+import fuelpdsh.pdsh
 import fuelpdsh.utils
 
 
@@ -93,6 +96,11 @@ def get_options(argumenter):
     )
 
     parser.add_argument(
+        "-V", "--version",
+        help="Print version",
+        action="store_true",
+        default=False)
+    parser.add_argument(
         "--concurrency",
         help="How many simultaneous connections should be established. "
              "By default (%(default)d), we are trying to connect to all nodes, no limits.",
@@ -143,6 +151,10 @@ def get_options(argumenter):
     )
 
     argumenter(parser)
+
+    if "-V" in sys.argv or "--version" in sys.argv:
+        print pbr.version.VersionInfo("fuel-pdsh").semantic_version().release_string()
+        sys.exit(os.EX_OK)
 
     return parser.parse_args()
 

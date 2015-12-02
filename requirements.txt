@@ -1,4 +1,6 @@
 argparse; python_version == '2.6'
 futures; python_version <= '3.2'
+argparse ; python_version == '2.6'
+futures ; python_version <= '3.2'
 python-fuelclient >= 7.0.0
 spur <= 0.4

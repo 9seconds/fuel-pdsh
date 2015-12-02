@@ -1,6 +1,4 @@
+argparse; python_version == '2.6'
+futures; python_version <= '3.2'
 python-fuelclient >= 7.0.0
 spur <= 0.4
-futures
-
-# PyCrypto >= 2.5 has a big performance degradation
-pycrypto < 2.5

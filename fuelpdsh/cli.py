@@ -10,7 +10,7 @@ import argparse
 
 import fuelpdsh
 
-from . import nailgun, pdsh
+from . import nailgun, pdsh, filetransfer
 
 
 LOG = fuelpdsh.logger(__name__)
@@ -47,18 +47,25 @@ def remote_cmd_argumenter(parser):
     parser.add_argument(
         "command",
         help="Command to execute",
-        nargs="+"
-    )
-
-
-def cp_to_remote_argumenter(parser):
-    parser.add_argument(
-        "source_paths",
-        help="Source paths to copy",
         nargs="+")
+
+
+def fetch_cmd_argumenter(parser):
     parser.add_argument(
-        "destination_path",
-        help="Remote destination")
+        "remote_path",
+        help="Remote path of file to download")
+    parser.add_argument(
+        "local_path",
+        help="Local path to store downloaded file")
+
+
+def push_cmd_argumenter(parser):
+    parser.add_argument(
+        "local_path",
+        help="Local path of file to download")
+    parser.add_argument(
+        "remote_path",
+        help="Remote path to store uploaded file")
 
 
 def configure(options):
@@ -151,7 +158,7 @@ def get_options(argumenter):
 def argtype_comma_separated_list(func):
     @functools.wraps(func)
     def decorator(value):
-        if not isinstance(value, basestring):
+        if not isinstance(value, str):
             raise argparse.ArgumentTypeError("Value {0} has to be a string".format(value))
         if not value:
             value = []
@@ -198,4 +205,5 @@ def argtype_node_ips(values):
 
 
 remote_cmd = functools.partial(cli, pdsh.execute, remote_cmd_argumenter)
-# cp_to_remote = functools.partial(cli, fuelpdsh.cp.command, cp_to_remote_argumenter)
+fetch_cmd = functools.partial(cli, filetransfer.fetch, fetch_cmd_argumenter)
+push_cmd = functools.partial(cli, filetransfer.push, push_cmd_argumenter)

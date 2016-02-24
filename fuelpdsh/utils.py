@@ -33,4 +33,6 @@ def do_for_all_hosts(func, hostnames, options):
         pass
 
 
-connect = functools.partial(asyncssh.connect, known_hosts=None)
+connect = functools.partial(asyncssh.connect,
+                            known_hosts=None,
+                            compression_algs=['zlib@openssh.com'])
